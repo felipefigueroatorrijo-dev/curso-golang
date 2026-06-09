@@ -1,0 +1,277 @@
+openapi: 3.0.3
+info:
+  title: VideoJuegos API
+  description: API en Go para buscar juegos en RAWG y administrar una biblioteca personal en MongoDB.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Servidor local
+paths:
+  /api/search:
+    get:
+      summary: Buscar juegos en RAWG
+      parameters:
+        - name: q
+          in: query
+          description: Texto de búsqueda
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de juegos encontrados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    genres:
+                      type: array
+                      items:
+                        type: string
+                    platforms:
+                      type: array
+                      items:
+                        type: string
+                    image:
+                      type: string
+                    rating:
+                      type: number
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/games/{rawg_id}:
+    get:
+      summary: Detalle de juego RAWG
+      parameters:
+        - name: rawg_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalle del juego RAWG
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/db/health:
+    get:
+      summary: Verifica la conexión a MongoDB
+      responses:
+        '200':
+          description: Conexión OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/library:
+    get:
+      summary: Lista juegos guardados en la biblioteca
+      parameters:
+        - name: status
+          in: query
+          description: Filtrar por estado (pendiente, jugando, completado, abandonado)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de juegos guardados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Game'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Agrega un juego a la biblioteca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rawg_id
+                - title
+              properties:
+                rawg_id:
+                  type: integer
+                title:
+                  type: string
+                genre:
+                  type: string
+                platform:
+                  type: string
+                cover_url:
+                  type: string
+      responses:
+        '201':
+          description: Juego creado con éxito
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflicto - rawg_id ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/library/{id}:
+    put:
+      summary: Actualiza campos de un juego en la biblioteca
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                personal_note:
+                  type: string
+                personal_score:
+                  type: integer
+                status:
+                  type: string
+                  enum:
+                    - pendiente
+                    - jugando
+                    - completado
+                    - abandonado
+      responses:
+        '200':
+          description: Juego actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Game'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      summary: Elimina un juego de la biblioteca
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Eliminado correctamente
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/library/stats:
+    get:
+      summary: Estadísticas de la biblioteca
+      responses:
+        '200':
+          description: Estadísticas de la biblioteca
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  by_status:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  average_score:
+                    type: number
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  schemas:
+    Game:
+      type: object
+      properties:
+        id:
+          type: string
+        rawg_id:
+          type: integer
+        title:
+          type: string
+        genre:
+          type: string
+        platform:
+          type: string
+        cover_url:
+          type: string
+        personal_note:
+          type: string
+        personal_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        status:
+          type: string
+          enum:
+            - pendiente
+            - jugando
+            - completado
+            - abandonado
+        added_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        error:
+          type: string
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadGateway:
+      description: Error proxy a RAWG
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
