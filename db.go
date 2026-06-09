@@ -29,13 +29,7 @@ func InitMongo(ctx context.Context) error {
 	}
 
 	user := os.Getenv("DB_USER")
-	if user == "" {
-		user = os.Getenv("userDB")
-	}
 	pass := os.Getenv("DB_PASSWORD")
-	if pass == "" {
-		pass = os.Getenv("passUserDB..")
-	}
 	host := os.Getenv("DB_HOST")
 	if host == "" {
 		host = os.Getenv("MONGO_HOST")
@@ -54,14 +48,27 @@ func InitMongo(ctx context.Context) error {
 		hostPort = fmt.Sprintf("%s:%s", host, port)
 	}
 
-	var uri string
-	if user != "" && pass != "" {
-		uri = fmt.Sprintf("mongodb://%s:%s@%s", user, pass, hostPort)
-	} else {
-		uri = fmt.Sprintf("mongodb://%s", hostPort)
-	}
+	// Build URI without embedding credentials; provide credentials via options.Credential
+	uri := fmt.Sprintf("mongodb://%s", hostPort)
 
 	opts := options.Client().ApplyURI(uri)
+	if user != "" {
+		creds := options.Credential{
+			Username: user,
+			Password: pass,
+		}
+		// Allow overriding auth source/mechanism via env vars, otherwise use DB name
+		if authSource := os.Getenv("DB_AUTH_SOURCE"); authSource != "" {
+			creds.AuthSource = authSource
+		} else {
+			creds.AuthSource = dbName
+		}
+		if mech := os.Getenv("DB_AUTH_MECHANISM"); mech != "" {
+			creds.AuthMechanism = mech
+		}
+		opts.SetAuth(creds)
+	}
+
 	c, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		return err
